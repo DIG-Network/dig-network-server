@@ -2,11 +2,9 @@ import { Request, Response, NextFunction } from "express";
 import { createProxyMiddleware, Options } from "http-proxy-middleware";
 import NodeCache from "node-cache";
 import { ServerCoin, DigPeer } from "@dignetwork/dig-sdk";
-import { IncomingMessage } from "http";
 
 // Cache for peers, organized by storeId
 const peerCache = new NodeCache({ stdTTL: 600 }); // Cache for 10 minutes per storeId
-const resultCache = new NodeCache({ stdTTL: 600 }); // Cache the results for 10 minutes
 const offlinePeersCache = new NodeCache({ stdTTL: 300 }); // Blacklist cache for 5 minutes
 const activeConnections: { [peerIp: string]: number } = {}; // Track active connections for least-connections balancing
 
@@ -188,6 +186,14 @@ const validatePeer = async (peer: PeerInfo, storeId: string, rootHash: string, k
 };
 
 /**
+ * Select the first valid peer from a list of peers
+ */
+const selectValidPeer = async (peers: PeerInfo[], storeId: string, rootHash: string, key?: string): Promise<PeerInfo | null> => {
+  const validationPromises = peers.map((peer) => validatePeer(peer, storeId, rootHash, key).then((isValid) => (isValid ? peer : null)));
+  return Promise.race(validationPromises);
+};
+
+/**
  * Middleware to proxy requests through cached peers
  */
 export const networkRouter = async (
@@ -199,15 +205,6 @@ export const networkRouter = async (
   const key = req.path.split("/").slice(2).join("/");
 
   try {
-    // Check if the result is already cached for this storeId and rootHash
-    const cacheKey = `${storeId}:${rootHash}:${key}`; // Cache key includes storeId, rootHash, and key
-    const cachedResult = resultCache.get(cacheKey);
-    if (cachedResult) {
-      console.log(`Serving from cache for storeId: ${storeId}, rootHash: ${rootHash}, key: ${key}`);
-      res.send(cachedResult); // Serve cached result
-      return;
-    }
-
     await refreshPeerListIfNeeded(storeId);
     setupPeriodicRefresh(storeId);
 
@@ -217,34 +214,13 @@ export const networkRouter = async (
       return;
     }
 
-    let peer: PeerInfo | null = null;
-    let validPeerFound = false;
+    // Select peer using a combination of weighted random, least connections, latency-aware, and success rate
+    let peer = getWeightedRandomPeer(peers); // Start with weighted random
+    if (Math.random() < 0.5) peer = getLeastConnectionsPeer(peers); // Occasionally switch to least-connections
+    if (Math.random() < 0.5) peer = getLowestLatencyPeer(peers); // Occasionally prioritize lowest latency
+    if (Math.random() < 0.5) peer = getBestSuccessRatePeer(peers); // Occasionally prioritize success rate
 
-    // Loop through peers until a valid peer is found or peers are exhausted
-    while (peers.length > 0 && !validPeerFound) {
-      // Select peer using a combination of weighted random, least connections, latency-aware, and success rate
-      peer = getWeightedRandomPeer(peers); // Start with weighted random
-      if (Math.random() < 0.5) peer = getLeastConnectionsPeer(peers); // Occasionally switch to least-connections
-      if (Math.random() < 0.5) peer = getLowestLatencyPeer(peers); // Occasionally prioritize lowest latency
-      if (Math.random() < 0.5) peer = getBestSuccessRatePeer(peers); // Occasionally prioritize success rate
-
-      // Validate the peer
-      const isValid = await validatePeer(peer, storeId, rootHash, key);
-      if (isValid) {
-        validPeerFound = true;
-      } else {
-        // Adjust peer stats for failure and continue to the next peer
-        adjustPeerStats(peer, false, 0);
-        peers = peers.filter(p => p.ipAddress !== peer!.ipAddress); // Remove failed peer from the list
-      }
-    }
-
-    if (!validPeerFound) {
-      res.status(500).send("No valid peers available after validation.");
-      return;
-    }
-
-    const peerIp = peer!.ipAddress;
+    const peerIp = peer.ipAddress;
     activeConnections[peerIp] += 1;
 
     let contentUrl = `http://${peerIp}:4161/${chainName}.${storeId}.${rootHash}`;
@@ -256,6 +232,7 @@ export const networkRouter = async (
 
     // Set the X-Peer-Served-By header
     res.setHeader("X-Network-Origin", `DIG Network: ${peerIp}`);
+    res.setHeader('Cache-Control', 'public, max-age=3600'); 
 
     const start = Date.now();
 
@@ -266,23 +243,13 @@ export const networkRouter = async (
       // @ts-ignore
       onError: (err: any) => {
         activeConnections[peerIp] -= 1;
-        adjustPeerStats(peer!, false, Date.now() - start);
+        adjustPeerStats(peer, false, Date.now() - start);
         res.status(500).send("Proxy error");
       },
       onProxyReq: (proxyReq: any) => proxyReq.setHeader("Host", `${peerIp}:4161`),
-      onProxyRes: (proxyRes: IncomingMessage, req: any, res: any) => {
+      onProxyRes: () => {
         activeConnections[peerIp] -= 1;
-        adjustPeerStats(peer!, true, Date.now() - start);
-
-        // Capture the response and cache it by storeId and rootHash
-        let responseData = '';
-        proxyRes.on('data', (chunk) => {
-          responseData += chunk;
-        });
-        proxyRes.on('end', () => {
-          console.log(`Caching result for storeId: ${storeId}, rootHash: ${rootHash}`);
-          resultCache.set(cacheKey, responseData); // Cache the result
-        });
+        adjustPeerStats(peer, true, Date.now() - start);
       },
     };
 
