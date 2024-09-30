@@ -33,12 +33,24 @@ jobs:
         id: project-name
         run: |
           PROJECT_NAME=$(jq -r '.name' package.json)
+          if [ -z "$PROJECT_NAME" ]; then
+            echo "Project name not found in package.json!"
+            exit 1
+          fi
           echo "PROJECT_NAME=$PROJECT_NAME" >> $GITHUB_ENV
+
+      - name: Debug GITHUB_REF
+        run: |
+          echo "GITHUB_REF: $GITHUB_REF"
 
       - name: Get tag name
         id: tag-name
         run: |
-          TAGNAME=$(echo $GITHUB_REF | cut -d / -f 3)
+          TAGNAME=$(echo $GITHUB_REF | sed 's/refs\/tags\///')
+          if [ -z "$TAGNAME" ]; then
+            echo "TAGNAME is empty!"
+            exit 1
+          fi
           echo "TAGNAME=$TAGNAME" >> $GITHUB_ENV
 
       - name: Determine Docker Tag
@@ -61,7 +73,18 @@ jobs:
 
       - name: Build and Push Docker Image
         run: |
+          echo "Building and pushing Docker image..."
+          echo "PROJECT_NAME: ${{ env.PROJECT_NAME }}"
+          echo "DOCKER_TAG: ${{ env.DOCKER_TAG }}"
+          echo "TAGNAME: ${{ env.TAGNAME }}"
+
+          # Ensure PROJECT_NAME, DOCKER_TAG, and TAGNAME are not empty
+          if [ -z "${{ env.PROJECT_NAME }}" ] || [ -z "${{ env.DOCKER_TAG }}" ] || [ -z "${{ env.TAGNAME }}" ]; then
+            echo "Error: One of the required variables is empty!"
+            exit 1
+          fi
+
           docker build -t ${{ vars.DOCKER_NAMESPACE }}/${{ env.PROJECT_NAME }}:${{ env.DOCKER_TAG }} .
-          docker tag ${{ vars.DOCKER_NAMESPACE }}/${{ env.PROJECT_NAME }}:${{ env.DOCKER_TAG }} ${{ vars.DOCKER_NAMESPACE }}/${{ env.PROJECT_NAME }}:${{ steps.tag-name.outputs.TAGNAME }}
+          docker tag ${{ vars.DOCKER_NAMESPACE }}/${{ env.PROJECT_NAME }}:${{ env.DOCKER_TAG }} ${{ vars.DOCKER_NAMESPACE }}/${{ env.PROJECT_NAME }}:${{ env.TAGNAME }}
           docker push ${{ vars.DOCKER_NAMESPACE }}/${{ env.PROJECT_NAME }}:${{ env.DOCKER_TAG }}
-          docker push ${{ vars.DOCKER_NAMESPACE }}/${{ env.PROJECT_NAME }}:${{ steps.tag-name.outputs.TAGNAME }}
+          docker push ${{ vars.DOCKER_NAMESPACE }}/${{ env.PROJECT_NAME }}:${{ env.TAGNAME }}
