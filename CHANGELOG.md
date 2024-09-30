@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.0.1-alpha.12](https://github.com/DIG-Network/dig-network-server/compare/v0.0.1-alpha.11...v0.0.1-alpha.12) (2024-09-30)
+
+
+### Bug Fixes
+
+* routing ([d8b98b0](https://github.com/DIG-Network/dig-network-server/commit/d8b98b00ae2e480c32f0c35d8fbebaf3169864ec))
+
 ### [0.0.1-alpha.11](https://github.com/DIG-Network/dig-network-server/compare/v0.0.1-alpha.10...v0.0.1-alpha.11) (2024-09-30)
 
 
