@@ -29,10 +29,6 @@ const storeRefreshIntervals: { [storeId: string]: NodeJS.Timeout } = {};
 
 /**
  * Enforce a timeout on a promise
- * @param {Promise<T>} promise - The promise to enforce timeout on
- * @param {number} ms - Timeout duration in milliseconds
- * @param {string} timeoutMessage - Message to show on timeout
- * @returns {Promise<T>} - A promise that either resolves or rejects after timeout
  */
 const withTimeout = <T>(promise: Promise<T>, ms: number, timeoutMessage: string): Promise<T> => {
   return Promise.race([
@@ -43,7 +39,6 @@ const withTimeout = <T>(promise: Promise<T>, ms: number, timeoutMessage: string)
 
 /**
  * Seed the peer list for a specific storeId, or refresh if necessary
- * @param {string} storeId - The store ID for which peers are seeded
  */
 const seedPeerList = async (storeId: string): Promise<void> => {
   try {
@@ -74,7 +69,6 @@ const seedPeerList = async (storeId: string): Promise<void> => {
 
 /**
  * Refresh peer list for a given storeId if the epoch has changed or peers are exhausted
- * @param {string} storeId - The store ID for which peers should be refreshed
  */
 const refreshPeerListIfNeeded = async (storeId: string): Promise<void> => {
   try {
@@ -92,7 +86,6 @@ const refreshPeerListIfNeeded = async (storeId: string): Promise<void> => {
 
 /**
  * Set up periodic refresh for a specific storeId's peer list
- * @param {string} storeId - The store ID for which periodic refresh should be set up
  */
 const setupPeriodicRefresh = (storeId: string): void => {
   if (storeRefreshIntervals[storeId]) return;
@@ -105,9 +98,6 @@ const setupPeriodicRefresh = (storeId: string): void => {
 
 /**
  * Adjust peer statistics on success or failure
- * @param {PeerInfo} peer - Peer information object
- * @param {boolean} success - Whether the request was successful
- * @param {number} latency - The latency of the request
  */
 const adjustPeerStats = (peer: PeerInfo, success: boolean, latency: number): void => {
   peer.totalRequests += 1;
@@ -128,12 +118,54 @@ const adjustPeerStats = (peer: PeerInfo, success: boolean, latency: number): voi
 };
 
 /**
+ * Weighted Random selection for peers
+ */
+const getWeightedRandomPeer = (peers: PeerInfo[]): PeerInfo => {
+  const totalWeight = peers.reduce((sum, peer) => sum + peer.weight, 0);
+  let randomWeight = Math.random() * totalWeight;
+
+  for (const peer of peers) {
+    randomWeight -= peer.weight;
+    if (randomWeight <= 0) {
+      return peer;
+    }
+  }
+
+  return peers[0]; // Fallback to first peer if none selected
+};
+
+/**
+ * Least Connections selection
+ */
+const getLeastConnectionsPeer = (peers: PeerInfo[]): PeerInfo => {
+  const availablePeers = peers.filter(peer => activeConnections[peer.ipAddress] !== undefined);
+  return availablePeers.reduce((minPeer, peer) => activeConnections[peer.ipAddress] < activeConnections[minPeer.ipAddress] ? peer : minPeer);
+};
+
+/**
+ * Latency Aware selection (based on average latency)
+ */
+const getLowestLatencyPeer = (peers: PeerInfo[]): PeerInfo => {
+  return peers.reduce((bestPeer, peer) => {
+    const avgLatency = peer.totalRequests > 0 ? peer.totalLatency / peer.totalRequests : Infinity;
+    const bestLatency = bestPeer.totalRequests > 0 ? bestPeer.totalLatency / bestPeer.totalRequests : Infinity;
+    return avgLatency < bestLatency ? peer : bestPeer;
+  });
+};
+
+/**
+ * Success Rate-Based selection (Adaptive Load Balancing)
+ */
+const getBestSuccessRatePeer = (peers: PeerInfo[]): PeerInfo => {
+  return peers.reduce((bestPeer, peer) => {
+    const successRate = peer.totalRequests > 0 ? (peer.successCount / peer.totalRequests) : 0;
+    const bestSuccessRate = bestPeer.totalRequests > 0 ? (bestPeer.successCount / bestPeer.totalRequests) : 0;
+    return successRate > bestSuccessRate ? peer : bestPeer;
+  });
+};
+
+/**
  * Validate if a peer contains the correct root hash or key data
- * @param {PeerInfo} peer - The peer to validate
- * @param {string} storeId - The storeId to test
- * @param {string} rootHash - The expected root hash
- * @param {string} [key] - Optional. The resource key to validate
- * @returns {Promise<boolean>} - Whether the peer is valid or not
  */
 const validatePeer = async (peer: PeerInfo, storeId: string, rootHash: string, key?: string): Promise<boolean> => {
   try {
@@ -154,22 +186,13 @@ const validatePeer = async (peer: PeerInfo, storeId: string, rootHash: string, k
 };
 
 /**
- * Select the first valid peer from a list of peers
- * @param {PeerInfo[]} peers - List of peers to test
- * @param {string} storeId - The store ID
- * @param {string} rootHash - The expected root hash
- * @param {string} [key] - Optional. The resource key to validate
- * @returns {Promise<PeerInfo | null>} - The first valid peer or null if none are valid
- */
-const selectValidPeer = async (peers: PeerInfo[], storeId: string, rootHash: string, key?: string): Promise<PeerInfo | null> => {
-  const validationPromises = peers.map((peer) => validatePeer(peer, storeId, rootHash, key).then((isValid) => (isValid ? peer : null)));
-  return Promise.race(validationPromises);
-};
-
-/**
  * Middleware to proxy requests through cached peers
  */
-export const networkRouter = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+export const networkRouter = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
   const { chainName, storeId, rootHash } = req as any;
   const key = req.path.split("/").slice(2).join("/");
 
@@ -183,62 +206,62 @@ export const networkRouter = async (req: Request, res: Response, next: NextFunct
       return;
     }
 
-    let validPeer: PeerInfo | null = null;
-    let peerForKeyFound = false;
+    let peer: PeerInfo | null = null;
+    let validPeerFound = false;
 
-    // Try to find a valid peer for the key if provided
-    if (key) {
-      while (peers.length > 0 && !validPeer) {
-        validPeer = await selectValidPeer(peers.splice(0, 5), storeId, rootHash, key);
-        if (validPeer) {
-          peerForKeyFound = true;
-        }
+    // Loop through peers until a valid peer is found or peers are exhausted
+    while (peers.length > 0 && !validPeerFound) {
+      // Select peer using a combination of weighted random, least connections, latency-aware, and success rate
+      peer = getWeightedRandomPeer(peers); // Start with weighted random
+      if (Math.random() < 0.5) peer = getLeastConnectionsPeer(peers); // Occasionally switch to least-connections
+      if (Math.random() < 0.5) peer = getLowestLatencyPeer(peers); // Occasionally prioritize lowest latency
+      if (Math.random() < 0.5) peer = getBestSuccessRatePeer(peers); // Occasionally prioritize success rate
+
+      // Validate the peer
+      const isValid = await validatePeer(peer, storeId, rootHash, key);
+      if (isValid) {
+        validPeerFound = true;
+      } else {
+        // Adjust peer stats for failure and continue to the next peer
+        adjustPeerStats(peer, false, 0);
+        peers = peers.filter(p => p.ipAddress !== peer!.ipAddress); // Remove failed peer from the list
       }
     }
 
-    // If no peer for the key was found, fall back to finding a peer with just the root hash
-    if (!peerForKeyFound) {
-      peers = peerCache.get(storeId) as PeerInfo[];
-      while (peers.length > 0 && !validPeer) {
-        validPeer = await selectValidPeer(peers.splice(0, 5), storeId, rootHash);
-      }
-    }
-
-    if (!validPeer) {
-      res.status(500).send("No valid peers available.");
+    if (!validPeerFound) {
+      res.status(500).send("No valid peers available after validation.");
       return;
     }
 
-    const peerIp = validPeer.ipAddress;
+    const peerIp = peer!.ipAddress;
     activeConnections[peerIp] += 1;
 
-    // If no peer for the key was found, just use the rootHash URL
     let contentUrl = `http://${peerIp}:4161/${chainName}.${storeId}.${rootHash}`;
-    if (peerForKeyFound && key) {
+    if (key) {
       contentUrl += `/${key}`;
     }
 
     console.log(`Proxying request to ${contentUrl}`);
 
-    const start = Date.now();
-
     // Set the X-Peer-Served-By header
     res.setHeader("X-Network-Origin", `DIG Network: ${peerIp}`);
+
+    const start = Date.now();
 
     const proxyOptions: Options = {
       target: `http://${peerIp}:4161`,
       changeOrigin: true,
-      pathRewrite: () => `/${chainName}.${storeId}.${rootHash}${peerForKeyFound ? `/${key}` : ""}`,
+      pathRewrite: () => `/${chainName}.${storeId}.${rootHash}${key ? `/${key}` : ""}`,
       // @ts-ignore
       onError: (err: any) => {
         activeConnections[peerIp] -= 1;
-        adjustPeerStats(validPeer!, false, Date.now() - start);
+        adjustPeerStats(peer!, false, Date.now() - start);
         res.status(500).send("Proxy error");
       },
       onProxyReq: (proxyReq: any) => proxyReq.setHeader("Host", `${peerIp}:4161`),
       onProxyRes: () => {
         activeConnections[peerIp] -= 1;
-        adjustPeerStats(validPeer!, true, Date.now() - start);
+        adjustPeerStats(peer!, true, Date.now() - start);
       },
     };
 
