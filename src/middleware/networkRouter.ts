@@ -52,7 +52,7 @@ const withTimeout = <T>(
 const seedPeerList = async (storeId: string): Promise<void> => {
   try {
     const serverCoin = new ServerCoin(storeId);
-    const peersIpAddresses = await serverCoin.sampleCurrentEpoch(10); // Seed with up to 10 peers
+    const peersIpAddresses = await serverCoin.sampleCurrentEpoch(50);
 
     peerCache.set(storeId, peersIpAddresses.map(ip => ({
       ipAddress: ip,
