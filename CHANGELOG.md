@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.0.1-alpha.17](https://github.com/DIG-Network/dig-network-server/compare/v0.0.1-alpha.16...v0.0.1-alpha.17) (2024-09-30)
+
+
+### Bug Fixes
+
+* add cache headers ([6fdc554](https://github.com/DIG-Network/dig-network-server/commit/6fdc554b6181ab3aa2503c5df03d58ab9e71695b))
+
 ### [0.0.1-alpha.16](https://github.com/DIG-Network/dig-network-server/compare/v0.0.1-alpha.15...v0.0.1-alpha.16) (2024-09-30)
 
 
