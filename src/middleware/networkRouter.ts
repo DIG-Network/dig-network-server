@@ -222,6 +222,9 @@ export const networkRouter = async (req: Request, res: Response, next: NextFunct
 
     const start = Date.now();
 
+    // Set the X-Peer-Served-By header
+    res.setHeader("X-Network-Origin", `DIG Network: ${peerIp}`);
+
     const proxyOptions: Options = {
       target: `http://${peerIp}:4161`,
       changeOrigin: true,
