@@ -33,7 +33,7 @@ RUN npm run build
 RUN npm rebuild
 
 # Expose the port the app runs on
-EXPOSE 4161
+EXPOSE 4162
 
 # Run npm start command when the container launches
 CMD ["node", "dist/cluster.js"]
