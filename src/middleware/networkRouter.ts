@@ -2,9 +2,11 @@ import { Request, Response, NextFunction } from "express";
 import { createProxyMiddleware, Options } from "http-proxy-middleware";
 import NodeCache from "node-cache";
 import { ServerCoin, DigPeer } from "@dignetwork/dig-sdk";
+import { IncomingMessage } from "http";
 
 // Cache for peers, organized by storeId
 const peerCache = new NodeCache({ stdTTL: 600 }); // Cache for 10 minutes per storeId
+const resultCache = new NodeCache({ stdTTL: 600 }); // Cache the results for 10 minutes
 const offlinePeersCache = new NodeCache({ stdTTL: 300 }); // Blacklist cache for 5 minutes
 const activeConnections: { [peerIp: string]: number } = {}; // Track active connections for least-connections balancing
 
@@ -197,6 +199,15 @@ export const networkRouter = async (
   const key = req.path.split("/").slice(2).join("/");
 
   try {
+    // Check if the result is already cached for this storeId and rootHash
+    const cacheKey = `${storeId}:${rootHash}:${key}`; // Cache key includes storeId, rootHash, and key
+    const cachedResult = resultCache.get(cacheKey);
+    if (cachedResult) {
+      console.log(`Serving from cache for storeId: ${storeId}, rootHash: ${rootHash}, key: ${key}`);
+      res.send(cachedResult); // Serve cached result
+      return;
+    }
+
     await refreshPeerListIfNeeded(storeId);
     setupPeriodicRefresh(storeId);
 
@@ -259,9 +270,19 @@ export const networkRouter = async (
         res.status(500).send("Proxy error");
       },
       onProxyReq: (proxyReq: any) => proxyReq.setHeader("Host", `${peerIp}:4161`),
-      onProxyRes: () => {
+      onProxyRes: (proxyRes: IncomingMessage, req: any, res: any) => {
         activeConnections[peerIp] -= 1;
         adjustPeerStats(peer!, true, Date.now() - start);
+
+        // Capture the response and cache it by storeId and rootHash
+        let responseData = '';
+        proxyRes.on('data', (chunk) => {
+          responseData += chunk;
+        });
+        proxyRes.on('end', () => {
+          console.log(`Caching result for storeId: ${storeId}, rootHash: ${rootHash}`);
+          resultCache.set(cacheKey, responseData); // Cache the result
+        });
       },
     };
 
