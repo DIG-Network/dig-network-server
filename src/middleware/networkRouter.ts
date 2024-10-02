@@ -296,7 +296,7 @@ export const networkRouter = async (
       }
 
       // Validate the selected peer
-      const isValid = await isValidPeer([peer], storeId, rootHash, key);
+      const isValid = await isValidPeer([peer], storeId, rootHash);
 
       if (isValid) {
         break; // Found a valid peer
