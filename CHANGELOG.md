@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.0.1-alpha.19](https://github.com/DIG-Network/dig-network-server/compare/v0.0.1-alpha.18...v0.0.1-alpha.19) (2024-10-02)
+
+
+### Bug Fixes
+
+* restore try until peer ([fd804af](https://github.com/DIG-Network/dig-network-server/commit/fd804af56d3c8c8d9410658fdfa0e8d8d1e8f77f))
+
 ### [0.0.1-alpha.18](https://github.com/DIG-Network/dig-network-server/compare/v0.0.1-alpha.17...v0.0.1-alpha.18) (2024-10-02)
 
 
