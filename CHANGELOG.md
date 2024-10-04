@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.0.1-alpha.22](https://github.com/DIG-Network/dig-network-server/compare/v0.0.1-alpha.21...v0.0.1-alpha.22) (2024-10-04)
+
+
+### Bug Fixes
+
+* update max age ([fbd8cf1](https://github.com/DIG-Network/dig-network-server/commit/fbd8cf1cc4613ec59f7e9c342363c6dff17babec))
+
 ### [0.0.1-alpha.21](https://github.com/DIG-Network/dig-network-server/compare/v0.0.1-alpha.20...v0.0.1-alpha.21) (2024-10-04)
 
 ### [0.0.1-alpha.20](https://github.com/DIG-Network/dig-network-server/compare/v0.0.1-alpha.19...v0.0.1-alpha.20) (2024-10-02)
