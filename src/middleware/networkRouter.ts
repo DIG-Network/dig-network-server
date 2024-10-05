@@ -323,7 +323,9 @@ export const networkRouter = async (
 
     // Set the X-Peer-Served-By header
     res.setHeader("X-Network-Origin", `DIG Network: ${peerIp}`);
-    res.setHeader("Cache-Control", "public, max-age=3600");
+    // Set Cache-Control header with max-age of 1 day (86400 seconds)
+    res.setHeader("Cache-Control", "public, max-age=86400");
+
 
     const start = Date.now();
 
