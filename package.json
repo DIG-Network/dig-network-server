@@ -24,7 +24,7 @@
     "LICENSE"
   ],
   "dependencies": {
-    "@dignetwork/dig-sdk": "^0.0.1-alpha.135",
+    "@dignetwork/dig-sdk": "^0.0.1-alpha.142",
     "cookie-parser": "^1.4.6",
     "cors": "^2.8.5",
     "express": "^4.21.0",
