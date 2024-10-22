@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.0.1-alpha.28](https://github.com/DIG-Network/dig-network-server/compare/v0.0.1-alpha.27...v0.0.1-alpha.28) (2024-10-22)
+
+
+### Features
+
+* once good peer has been discovered, prefer it until peer degrades ([0246557](https://github.com/DIG-Network/dig-network-server/commit/02465574e26c933a4f37293baebb39f0b18496bd))
+
 ### [0.0.1-alpha.27](https://github.com/DIG-Network/dig-network-server/compare/v0.0.1-alpha.26...v0.0.1-alpha.27) (2024-10-08)
 
 ### [0.0.1-alpha.26](https://github.com/DIG-Network/dig-network-server/compare/v0.0.1-alpha.25...v0.0.1-alpha.26) (2024-10-05)
